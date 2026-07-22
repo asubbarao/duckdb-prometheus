@@ -1,7 +1,8 @@
 # DuckDB Prometheus extension
 
 [![CI](https://github.com/botan/duckdb-prometheus/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/botan/duckdb-prometheus/actions/workflows/MainDistributionPipeline.yml)
-[![License](https://img.shields.io/github/license/botan/duckdb-prometheus)](LICENSE)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![License](https://img.shields.io/github/license/botan/duckdb-prometheus?color=blue)](LICENSE)
 
 Query Prometheus-compatible HTTP APIs through DuckDB. Select samples with
 PromQL; analyze them with SQL.
