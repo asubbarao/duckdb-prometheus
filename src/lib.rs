@@ -1,11 +1,15 @@
+mod client;
+mod error;
+mod model;
+
 use duckdb::{
+    Connection, Result,
     core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
     duckdb_entrypoint_c_api,
     ffi::duckdb_string_t,
     types::DuckString,
     vscalar::{ScalarFunctionSignature, VScalar},
-    vtab::{arrow::WritableVector, BindInfo, InitInfo, TableFunctionInfo, VTab},
-    Connection, Result,
+    vtab::{BindInfo, InitInfo, TableFunctionInfo, VTab, arrow::WritableVector},
 };
 use std::{
     error::Error,
