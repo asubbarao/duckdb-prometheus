@@ -1,4 +1,4 @@
-.PHONY: clean clean_all
+.PHONY: clean clean_all configure test_environment
 
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -11,20 +11,50 @@ USE_UNSTABLE_C_API=1
 # Target DuckDB version
 TARGET_DUCKDB_VERSION=v1.5.4
 
+UV?=uv
+UV_ENVIRONMENT_STAMP=configure/venv/.prometheus-test-environment
+
 all: configure debug
 
 # Include makefiles from DuckDB
 include extension-ci-tools/makefiles/c_api_extensions/base.Makefile
 include extension-ci-tools/makefiles/c_api_extensions/rust.Makefile
 
-configure: venv platform extension_version
+configure: test_environment
+	$(MAKE) platform extension_version
 
 debug: build_extension_library_debug build_extension_with_metadata_debug
 release: build_extension_library_release build_extension_with_metadata_release
 
 test: test_debug
-test_debug: test_extension_debug
-test_release: test_extension_release
+test_debug: test_extension_debug test_python_debug
+test_release: test_extension_release test_python_release
 
 clean: clean_build clean_rust
 clean_all: clean_configure clean
+
+ifneq ($(shell command -v $(UV) 2>/dev/null),)
+test_environment: $(UV_ENVIRONMENT_STAMP)
+else
+# The DuckDB distribution runners do not guarantee uv is installed, so retain
+# compatibility with the vendored bootstrap there. Local development uses uv.
+test_environment: venv
+endif
+
+$(UV_ENVIRONMENT_STAMP): Makefile test/requirements.txt
+	$(UV) venv --allow-existing --python $(PYTHON_BIN) configure/venv
+	$(UV) pip sync --python $(PYTHON_VENV_BIN) test/requirements.txt
+	$(PYTHON_VENV_BIN) -c "import duckdb, duckdb_sqllogictest, packaging"
+	$(PYTHON_VENV_BIN) -c "from pathlib import Path;Path('$@').touch()"
+
+.PHONY: test_python_debug test_python_release
+
+ifeq ($(SKIP_TESTS),1)
+test_python_debug test_python_release: tests_skipped
+else
+test_python_debug: check_configure
+	$(PYTHON_VENV_BIN) test/python/test_prometheus_integration.py build/debug/prometheus.duckdb_extension
+
+test_python_release: check_configure
+	$(PYTHON_VENV_BIN) test/python/test_prometheus_integration.py build/release/prometheus.duckdb_extension
+endif

@@ -1,0 +1,253 @@
+# name: test/sql/prometheus_scan.test
+# description: test Prometheus table-function registration, binding, and schemas
+# group: [prometheus]
+
+require prometheus
+
+# DESCRIBE binds functions and inspects schemas without making HTTP requests.
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_scan(
+    'up',
+    '2026-07-20 10:00:00',
+    '2026-07-20 11:00:00',
+    endpoint := 'http://127.0.0.1:1'
+));
+----
+labels	MAP(VARCHAR, VARCHAR)
+timestamp	TIMESTAMP WITH TIME ZONE
+value	DOUBLE
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_scan(
+    'up',
+    current_timestamp - INTERVAL '1 hour',
+    current_timestamp,
+    endpoint := 'http://127.0.0.1:1',
+    step := INTERVAL '1 day 1 microsecond',
+    request_timeout := INTERVAL '1.5 seconds',
+    labels := ['job', 'instance']
+));
+----
+labels	MAP(VARCHAR, VARCHAR)
+timestamp	TIMESTAMP WITH TIME ZONE
+value	DOUBLE
+job	VARCHAR
+instance	VARCHAR
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_query(
+    'up',
+    endpoint := 'http://127.0.0.1:1',
+    evaluation_time := TIMESTAMPTZ '2026-07-20 10:00:00+00',
+    labels := ['job']
+));
+----
+labels	MAP(VARCHAR, VARCHAR)
+timestamp	TIMESTAMP WITH TIME ZONE
+value	DOUBLE
+job	VARCHAR
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_scan_many(
+    ['up', 'rate(requests_total[5m])'],
+    '2026-07-20 10:00:00',
+    '2026-07-20 11:00:00',
+    endpoint := 'http://127.0.0.1:1',
+    labels := ['job']
+));
+----
+labels	MAP(VARCHAR, VARCHAR)
+timestamp	TIMESTAMP WITH TIME ZONE
+value	DOUBLE
+job	VARCHAR
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_query_many(
+    ['up', 'up'],
+    endpoint := 'http://127.0.0.1:1',
+    evaluation_time := TIMESTAMPTZ '2026-07-20 10:00:00+00'
+));
+----
+labels	MAP(VARCHAR, VARCHAR)
+timestamp	TIMESTAMP WITH TIME ZONE
+value	DOUBLE
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_labels(endpoint := 'http://127.0.0.1:1'))
+UNION ALL
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_label_values('job', endpoint := 'http://127.0.0.1:1'))
+UNION ALL
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_series('up', endpoint := 'http://127.0.0.1:1'));
+----
+label	VARCHAR
+value	VARCHAR
+labels	MAP(VARCHAR, VARCHAR)
+
+query TT
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM prometheus_metadata(endpoint := 'http://127.0.0.1:1'));
+----
+metric	VARCHAR
+type	VARCHAR
+help	VARCHAR
+unit	VARCHAR
+
+# The endpoint is a required named option today. Keeping it named allows a
+# future connection option to be added without changing positional arguments.
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00'
+);
+----
+endpoint must be provided
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := NULL
+);
+----
+endpoint must not be NULL
+
+# Plural query lists are required and every item must be non-null and non-empty.
+statement error
+SELECT * FROM prometheus_query_many(
+    []::VARCHAR[], endpoint := 'http://127.0.0.1:1'
+);
+----
+queries must not be empty
+
+statement error
+SELECT * FROM prometheus_query_many(
+    NULL::VARCHAR[], endpoint := 'http://127.0.0.1:1'
+);
+----
+queries must not be NULL
+
+statement error
+SELECT * FROM prometheus_query_many(
+    ['up', NULL], endpoint := 'http://127.0.0.1:1'
+);
+----
+queries[1] must not be NULL
+
+statement error
+SELECT * FROM prometheus_query_many(
+    ['up', ''], endpoint := 'http://127.0.0.1:1'
+);
+----
+queries[1] must not be empty
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'ftp://example.test'
+);
+----
+Prometheus endpoint URL must use http or https
+
+# Time bounds accept VARCHAR, TIMESTAMP, or TIMESTAMPTZ and reject other types.
+statement error
+SELECT * FROM prometheus_scan(
+    'up', DATE '2026-07-20', DATE '2026-07-21',
+    endpoint := 'http://127.0.0.1:1'
+);
+----
+start must be VARCHAR, TIMESTAMP, or TIMESTAMPTZ
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', TIMESTAMPTZ 'infinity', '2026-07-20 10:00:00+00',
+    endpoint := 'http://127.0.0.1:1'
+);
+----
+start must be a finite TIMESTAMPTZ value
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', TIMESTAMP '2026-07-20 11:00:00', TIMESTAMP '2026-07-20 10:00:00',
+    endpoint := 'http://127.0.0.1:1'
+);
+----
+start must not be after end
+
+# Fixed interval validation happens during binding.
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    request_timeout := INTERVAL '0 seconds'
+);
+----
+request_timeout must be greater than zero
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    step := INTERVAL '0 seconds'
+);
+----
+step must be greater than zero
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    step := INTERVAL '1 month'
+);
+----
+step must not contain months or years
+
+# Promoted labels are unique and cannot shadow the stable result columns.
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    labels := ['job', 'JOB']
+);
+----
+promoted label "JOB" is duplicated
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    labels := ['value']
+);
+----
+promoted label "value" conflicts with an existing result column
+
+statement error
+SELECT * FROM prometheus_scan(
+    'up', '2026-07-20 10:00:00+00', '2026-07-20 11:00:00+00',
+    endpoint := 'http://127.0.0.1:1',
+    labels := ['job', NULL]
+);
+----
+labels[1] must not be NULL
+
+# Optional instant/discovery timestamps use the same strict parser.
+statement error
+SELECT * FROM prometheus_query(
+    'up', endpoint := 'http://127.0.0.1:1', evaluation_time := DATE '2026-07-20'
+);
+----
+evaluation_time must be VARCHAR, TIMESTAMP, or TIMESTAMPTZ
+
+statement error
+SELECT * FROM prometheus_labels(
+    endpoint := 'http://127.0.0.1:1',
+    start_time := TIMESTAMP '2026-07-20 11:00:00',
+    end_time := TIMESTAMP '2026-07-20 10:00:00'
+);
+----
+start must not be after end

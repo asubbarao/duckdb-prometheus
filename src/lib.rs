@@ -1,9 +1,13 @@
 mod bind;
 mod client;
+mod discovery;
 mod error;
 mod model;
 mod scan;
 
+use discovery::{
+    PrometheusLabelValuesVTab, PrometheusLabelsVTab, PrometheusMetadataVTab, PrometheusSeriesVTab,
+};
 use duckdb::{Connection, Result, duckdb_entrypoint_c_api};
 use scan::{
     PrometheusQueryManyVTab, PrometheusQueryVTab, PrometheusScanManyVTab, PrometheusScanVTab,
@@ -30,5 +34,9 @@ pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>
     con.register_table_function::<PrometheusScanManyVTab>("prometheus_scan_many")?;
     con.register_table_function::<PrometheusQueryVTab>("prometheus_query")?;
     con.register_table_function::<PrometheusQueryManyVTab>("prometheus_query_many")?;
+    con.register_table_function::<PrometheusLabelsVTab>("prometheus_labels")?;
+    con.register_table_function::<PrometheusLabelValuesVTab>("prometheus_label_values")?;
+    con.register_table_function::<PrometheusSeriesVTab>("prometheus_series")?;
+    con.register_table_function::<PrometheusMetadataVTab>("prometheus_metadata")?;
     Ok(())
 }
