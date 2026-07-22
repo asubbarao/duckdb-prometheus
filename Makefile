@@ -1,4 +1,4 @@
-.PHONY: clean clean_all configure test_environment
+.PHONY: check clean clean_all configure format_check lint test_rust test_environment
 
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -11,6 +11,7 @@ USE_UNSTABLE_C_API=1
 # Target DuckDB version
 TARGET_DUCKDB_VERSION=v1.5.4
 
+RUST_ENV=DUCKDB_EXTENSION_NAME=$(EXTENSION_NAME) DUCKDB_EXTENSION_MIN_DUCKDB_VERSION=$(TARGET_DUCKDB_VERSION)
 UV?=uv
 UV_ENVIRONMENT_STAMP=configure/venv/.prometheus-test-environment
 
@@ -46,6 +47,17 @@ $(UV_ENVIRONMENT_STAMP): Makefile test/requirements.txt
 	$(UV) pip sync --python $(PYTHON_VENV_BIN) test/requirements.txt
 	$(PYTHON_VENV_BIN) -c "import duckdb, duckdb_sqllogictest, packaging"
 	$(PYTHON_VENV_BIN) -c "from pathlib import Path;Path('$@').touch()"
+
+format_check:
+	cargo fmt --all -- --check
+
+lint: format_check
+	$(RUST_ENV) cargo clippy --locked --all-targets --all-features -- -D warnings
+
+test_rust:
+	$(RUST_ENV) cargo test --locked --all-targets --all-features
+
+check: lint test_rust
 
 .PHONY: test_python_debug test_python_release
 
