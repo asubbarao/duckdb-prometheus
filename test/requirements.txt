@@ -1,5 +1,0 @@
-# Python dependencies used only by the extension integration tests.
-duckdb==1.5.4
-duckdb-sqllogictest @ git+https://github.com/duckdb/duckdb-sqllogictest-python@2ac8dbc012ddbd96a57dca37784fd8ee3c0eb021
-packaging==26.2
-termcolor==3.3.0

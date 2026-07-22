@@ -13,8 +13,6 @@ TARGET_DUCKDB_VERSION=v1.5.4
 DUCKDB_TEST_VERSION?=$(patsubst v%,%,$(TARGET_DUCKDB_VERSION))
 
 RUST_ENV=DUCKDB_EXTENSION_NAME=$(EXTENSION_NAME) DUCKDB_EXTENSION_MIN_DUCKDB_VERSION=$(TARGET_DUCKDB_VERSION)
-UV?=uv
-UV_ENVIRONMENT_STAMP=configure/venv/.prometheus-test-environment
 
 all: configure debug
 
@@ -35,19 +33,7 @@ test_release: test_extension_release test_python_release
 clean: clean_build clean_rust
 clean_all: clean_configure clean
 
-ifneq ($(shell command -v $(UV) 2>/dev/null),)
-test_environment: $(UV_ENVIRONMENT_STAMP)
-else
-# The DuckDB distribution runners do not guarantee uv is installed, so retain
-# compatibility with the vendored bootstrap there. Local development uses uv.
 test_environment: venv
-endif
-
-$(UV_ENVIRONMENT_STAMP): Makefile test/requirements.txt
-	$(UV) venv --allow-existing --python $(PYTHON_BIN) configure/venv
-	$(UV) pip sync --python $(PYTHON_VENV_BIN) test/requirements.txt
-	$(PYTHON_VENV_BIN) -c "import duckdb, duckdb_sqllogictest, packaging"
-	$(PYTHON_VENV_BIN) -c "from pathlib import Path;Path('$@').touch()"
 
 format_check:
 	cargo fmt --all -- --check

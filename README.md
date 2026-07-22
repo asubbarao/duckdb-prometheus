@@ -3,18 +3,16 @@
 [![CI](https://github.com/botan/duckdb-prometheus/actions/workflows/MainDistributionPipeline.yml/badge.svg)](https://github.com/botan/duckdb-prometheus/actions/workflows/MainDistributionPipeline.yml)
 [![License](https://img.shields.io/github/license/botan/duckdb-prometheus)](LICENSE)
 
-Query Prometheus-compatible HTTP APIs, including Thanos Query, directly from
-DuckDB. Use PromQL to select samples, then use SQL to inspect, aggregate, join,
-or export the results.
+Query Prometheus-compatible HTTP APIs through DuckDB. Select samples with
+PromQL; analyze them with SQL.
 
 > [!WARNING]
-> This is an experimental, Codex-generated project. Use it at your own risk.
-> The API is unstable and may change without notice.
+> Experimental and generated with Codex. Use at your own risk; the API may
+> change without notice.
 
 ## Quick start
 
-The extension builds from source against DuckDB v1.5.4. You need
-Rust 1.86 or newer, Python 3, [uv](https://docs.astral.sh/uv/), Make, and Git.
+Requires Rust 1.86+, Python 3.10+, and Make. Targets DuckDB v1.5.4.
 
 ```shell
 git clone --recurse-submodules https://github.com/botan/duckdb-prometheus.git
@@ -23,18 +21,19 @@ make configure
 make debug
 ```
 
-Start DuckDB with support for unsigned local extensions, then load the build:
+Start DuckDB with unsigned extensions enabled:
 
 ```shell
 duckdb -unsigned
 ```
 
+Load the debug build:
+
 ```sql
 LOAD './build/debug/prometheus.duckdb_extension';
 ```
 
-Query the last 15 minutes of the standard `up` metric, replacing the endpoint
-with your Prometheus or Thanos Query URL:
+Query `up` over the last 15 minutes:
 
 ```sql
 SELECT timestamp, job, instance, value
@@ -49,9 +48,8 @@ FROM prometheus_scan(
 ORDER BY timestamp DESC, job, instance;
 ```
 
-Each sample becomes one row. The complete label set remains in the `labels`
-map; the `labels` argument also exposes selected labels as nullable `VARCHAR`
-columns.
+`prometheus_scan` returns one row per sample. `labels` contains the complete
+label map; the `labels` argument also adds selected labels as nullable columns.
 
 To load the local build from Python:
 
@@ -66,9 +64,7 @@ con.execute("LOAD './build/debug/prometheus.duckdb_extension'")
 
 ### Combine PromQL and SQL
 
-Filter and aggregate in Prometheus when possible to reduce the data transferred
-to DuckDB. This query calculates a per-job request rate in PromQL, then produces
-hourly averages in SQL:
+Calculate per-job request rates in PromQL, then hourly averages in SQL:
 
 ```sql
 SELECT
@@ -89,8 +85,7 @@ ORDER BY ALL;
 
 ### Run an instant query
 
-`prometheus_query` evaluates PromQL once at the Prometheus server's current
-time:
+Run an instant query at the Prometheus server's current time:
 
 ```sql
 SELECT job, instance, value
@@ -102,12 +97,11 @@ FROM prometheus_query(
 ORDER BY job, instance;
 ```
 
-Set `evaluation_time := TIMESTAMPTZ '2026-07-20 10:00:00+00'` to evaluate at a
-specific time.
+Use `evaluation_time` to query a specific time.
 
 ### Discover metrics
 
-List metric names known to the server:
+List metric names:
 
 ```sql
 SELECT value AS metric
@@ -127,9 +121,8 @@ ORDER BY metric;
 | `prometheus_query(query, ...)` | Run one instant query |
 | `prometheus_query_many(queries, ...)` | Run several instant queries |
 
-`query` values are raw PromQL. Range bounds accept `TIMESTAMPTZ`, `TIMESTAMP`,
-or timestamp strings. Values without an offset are interpreted as UTC, and
-range bounds are inclusive.
+`query` is raw PromQL. `start` and `end` accept `TIMESTAMPTZ`, `TIMESTAMP`, or
+timestamp strings. Unzoned values are UTC; bounds are inclusive.
 
 | Named argument | Functions | Type | Default |
 |---|---|---|---|
@@ -139,11 +132,11 @@ range bounds are inclusive.
 | `step` | Range | `INTERVAL` | `1 minute` |
 | `evaluation_time` | Instant | Timestamp or timestamp string | Server time |
 
-The endpoint may include a reverse-proxy path and existing query parameters.
-Requests are currently unauthenticated. `request_timeout` and `step` must be
-positive fixed intervals; months and years are not accepted.
+`endpoint` may include a proxy path and query parameters. Requests are
+unauthenticated. `request_timeout` and `step` must be positive fixed intervals;
+months and years are not accepted.
 
-All four query functions return the same base columns:
+All query functions return:
 
 | Column | Type | Description |
 |---|---|---|
@@ -151,18 +144,17 @@ All four query functions return the same base columns:
 | `timestamp` | `TIMESTAMP WITH TIME ZONE` | Absolute sample time |
 | `value` | `DOUBLE` | Sample value, including `NaN` and infinities |
 
-Read a label with `labels['job']`, or promote frequently used labels to columns
-with `labels := ['job', 'instance']`. Promoted names must be unique and cannot
-be `labels`, `timestamp`, or `value`.
+Read labels with `labels['job']`. Promote them to columns with
+`labels := ['job', 'instance']`; names must be unique and cannot be `labels`,
+`timestamp`, or `value`.
 
-Instant vectors, scalars, and matrices are flattened to this schema. The plural
-functions require a non-empty list, execute requests one at a time, and combine
-the results with `UNION ALL` semantics. If one request fails, the complete query
-fails; `request_timeout` applies separately to each request.
+Instant vectors, scalars, and matrices use this schema. Plural functions require
+a non-empty list, run requests sequentially, and use `UNION ALL` semantics. One
+failed request fails the query. `request_timeout` applies per request.
 
 ## Discovery functions
 
-All discovery functions require `endpoint` and also accept `request_timeout`.
+All discovery functions require `endpoint` and accept `request_timeout`.
 
 | Function | Result columns |
 |---|---|
@@ -171,14 +163,13 @@ All discovery functions require `endpoint` and also accept `request_timeout`.
 | `prometheus_series(matcher, ...)` | `labels MAP(VARCHAR, VARCHAR)` |
 | `prometheus_metadata(...)` | `metric VARCHAR`, `type VARCHAR`, `help VARCHAR`, `unit VARCHAR` |
 
-`prometheus_labels` and `prometheus_label_values` optionally accept `matcher`.
-Those two functions and `prometheus_series` also accept `start_time` and
-`end_time`. `prometheus_metadata` optionally accepts `metric`.
+`prometheus_labels` and `prometheus_label_values` accept optional `matcher`,
+`start_time`, and `end_time`; `prometheus_series` accepts the two time bounds.
+`prometheus_metadata` accepts optional `metric`.
 
 ## Build and test
 
-For an optimized build, run `make release` and load
-`build/release/prometheus.duckdb_extension`.
+`make release` writes `build/release/prometheus.duckdb_extension`.
 
 ```shell
 make check
@@ -191,7 +182,7 @@ make test_release
 `make check` runs formatting, Clippy with warnings denied, and Rust tests. The
 integration tests use an ephemeral local Prometheus-compatible server.
 
-## Current limitations
+## Limitations
 
 - DuckDB filters and aggregations are not pushed into PromQL.
 - Responses have no extension-imposed byte, series, or sample limit. Singular
