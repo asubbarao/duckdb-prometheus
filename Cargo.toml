@@ -1,7 +1,14 @@
 [package]
-name = "rusty_quack"
+name = "prometheus"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.86"
+license = "Apache-2.0"
+description = "Query Prometheus-compatible APIs, including Thanos, from DuckDB"
+readme = "README.md"
+keywords = ["duckdb", "prometheus", "thanos", "analytics"]
+categories = ["database"]
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,7 +22,7 @@ strip = true
 # src/wasm_lib.rs forwards to src/lib.rs so that we can change from cdylib
 # (that is needed while compiling natively) to staticlib (needed since the
 # actual linking will be done via emcc
-name = "rusty_quack"
+name = "prometheus"
 path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
